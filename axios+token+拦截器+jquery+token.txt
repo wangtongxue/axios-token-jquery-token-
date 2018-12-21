@@ -1,0 +1,148 @@
+当前仅仅用来记录方式方法
+
+第一步: 路由 多添加一个自定义字段 mustLogin
+
+path: '/repository',
+name: 'repository',
+meta: {
+   mustLogin: true,  // 添加该字段，表示进入这个路由是需要登录的
+},
+component: Repository
+
+第二步: 
+
+router.beforeEach((to, from, next) => {
+    if (to.meta.mustLogin) {  // 判断该路由是否必须登陆才能进去
+        if (store.state.token) {  // 通过vuex state获取当前的token是否存在（token是在登陆成功之后拿到的并存储在客户端之中的）
+            next(); // 当token存在的时候进入页面 
+        }
+        else {
+            next({
+                path: '/login',
+                query: {redirect: to.fullPath}  // 将跳转的路由path作为参数，登录成功后跳转到该路由
+            })
+        }
+    }
+    else {
+        next();
+    }
+}
+
+第三步:  拦截器 (要想统一处理所有http请求和响应，就得用上 axios 的拦截器。)
+
+每次跳页面, 都要获取新路由对应的html页面, 这时候可以用axios的http拦截
+每次路由跳转, 都先让后台验证一下token是否有效, 在http头添加token, 
+当后端接口返回 401 Unauthorized（未授权） ，让用户重新登录。
+
+关于Autorization     使用之后会忽略cookie的token,  削弱了安全性, 可以配合https
+
+// http request 拦截器 写在main.js拿到axios之后，每一次进行ajax请求的时候都会先触发拦截器
+axios.interceptors.request.use(
+    config => {
+        if (store.state.token) {  // 判断是否存在token，如果存在的话，则每个http header都加上token
+            config.headers.Authorization = `token ${store.state.token}`;
+        }
+        return config;
+    },
+    err => {
+        return Promise.reject(err);
+    });
+
+// http response 拦截器
+axios.interceptors.response.use(
+    response => {
+        return response;
+    },
+    error => {
+        if (error.response) {
+            switch (error.response.status) {
+                case 401:  401  旌旗  灵医 , 只用[授权] 旌旗的医生 才是 灵医
+
+                    // 返回 401 清除token信息并跳转到登录页面
+                    store.commit(types.LOGOUT);
+                    router.replace({
+                        path: 'login',
+                        query: {redirect: router.currentRoute.fullPath}
+                    })
+            }
+        }
+        return Promise.reject(error.response.data)   // 返回接口返回的错误信息
+    });
+借鉴摘抄：https://www.cnblogs.com/dhsz/p/6410031.html
+
+
+jquery ajax 进行token验证  当token存在的时候进行请求 否则 返回到登陆页面
+function edit(obj,obj1,url){ 
+  var token1 ='basic '+ window.sessionStorage.token;
+    //这里的格式是按后台要求的  通过缓存读取Token
+    
+  var url = browerUrl+url;
+    
+  var obj1 = "#"+obj1;
+   
+  var formData = new FormData($(obj1)[0]);
+    
+  for(var x of formData){
+        console.log(x)
+    }
+   
+   $.ajax({
+        
+      type:"post",
+        
+      async:true,
+       
+      cache: false,
+        
+      contentType: false,
+       
+      processData: false,
+     
+      url:url,
+       
+      data:formData,
+       
+      //在请求前设置请求头 在请求头里面设置设置请求头的信息
+        
+      beforeSend: function(request) {
+                       
+         request.setRequestHeader("Authorization", token1);
+                  
+      },
+        
+      //或者直接设置请求头
+        
+      //headers:{"Authorization", token},
+       
+      success:function(dat){
+  
+         console.log(dat);
+            
+         if(dat.code==1){
+           
+            messageShow("操作成功");
+            
+            tanClose(obj);
+           
+            setTimeout(reload(),3000);
+           
+         }
+  else if(dat.code==309){
+   
+              backHome();
+   
+         }
+   else{
+     
+              console.log(dat.msg);
+      
+         }
+
+       
+     }
+    
+  })
+
+}
+
+借鉴摘抄：https://blog.csdn.net/jx950915/article/details/78056998
